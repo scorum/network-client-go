@@ -1,4 +1,4 @@
-// Package listener is a library for fetching blocks from cosmos based blockchain node.
+// Package fetcher is a library for fetching blocks from cosmos based blockchain node.
 package fetcher
 
 import (
