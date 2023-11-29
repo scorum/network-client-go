@@ -53,8 +53,13 @@ func New(ctx context.Context, node string, timeout time.Duration) (Fetcher, erro
 		return nil, fmt.Errorf("failed to create grpc conn: %w", err)
 	}
 
+	return NewWithClient(conn, timeout)
+}
+
+// NewWithClient returns new instance of fetcher.
+func NewWithClient(client *grpc.ClientConn, timeout time.Duration) (Fetcher, error) {
 	return fetcher{
-		c:       tmservice.NewServiceClient(conn),
+		c:       tmservice.NewServiceClient(client),
 		d:       app.MakeEncodingConfig().TxConfig.TxDecoder(),
 		timeout: timeout,
 	}, nil
