@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/cosmos/cosmos-sdk/x/auth/types"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 
 	"github.com/scorum/cosmos-network/app"
 )
@@ -57,6 +59,8 @@ type broadcaster struct {
 
 // Config ...
 type Config struct {
+	Client *http.Client
+
 	KeyringRootDir     string
 	KeyringBackend     string
 	KeyringPromptInput string
@@ -91,7 +95,12 @@ func New(cfg Config) (*broadcaster, error) {
 		return nil, fmt.Errorf("failed to get account: %w", err)
 	}
 
-	c, err := client.NewClientFromNode(cfg.NodeURI)
+	var c *rpchttp.HTTP
+	if cfg.Client != nil {
+		c, err = rpchttp.NewWithClient(cfg.NodeURI, "/websocket", cfg.Client)
+	} else {
+		c, err = rpchttp.New(cfg.NodeURI, "/websocket")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client: %w", err)
 	}
