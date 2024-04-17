@@ -10,7 +10,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	tt "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/cosmos/cosmos-sdk/types/tx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 
@@ -25,7 +25,12 @@ var ErrTooHighBlockRequested = errors.New("too high block requested")
 type Block struct {
 	Height uint64
 	Time   time.Time
-	Txs    []sdk.Tx
+	Txs    []Tx
+}
+
+type Tx struct {
+	Messages []sdk.Msg
+	Hash     string
 }
 
 // Fetcher interface for fetching.
@@ -38,43 +43,29 @@ type Fetcher interface {
 }
 
 type fetcher struct {
-	c       tmservice.ServiceClient
+	txc tx.ServiceClient
+	tmc tmservice.ServiceClient
+
 	d       sdk.TxDecoder
 	timeout time.Duration
 }
 
 // New returns new instance of fetcher.
-func New(ctx context.Context, node string, timeout time.Duration) (Fetcher, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, node, grpc.WithInsecure())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create grpc conn: %w", err)
-	}
-
-	return NewWithClient(conn, timeout)
-}
-
-// NewWithClient returns new instance of fetcher.
-func NewWithClient(client *grpc.ClientConn, timeout time.Duration) (Fetcher, error) {
+func New(conn *grpc.ClientConn, timeout time.Duration) Fetcher {
 	return fetcher{
-		c:       tmservice.NewServiceClient(client),
+		txc: tx.NewServiceClient(conn),
+		tmc: tmservice.NewServiceClient(conn),
+
 		d:       app.MakeEncodingConfig().TxConfig.TxDecoder(),
 		timeout: timeout,
-	}, nil
+	}
 }
 
 // FetchBlocks starts fetching routine and runs handleFunc for every block.
-func (f fetcher) FetchBlocks(ctx context.Context, from uint64, handleFunc func(b Block) error, opts ...FetchBlocksOption) error {
+func (f fetcher) FetchBlocks(ctx context.Context, height uint64, handleFunc func(b Block) error, opts ...FetchBlocksOption) error {
 	cfg := defaultFetchBlockOptions
 	for _, v := range opts {
 		v(&cfg)
-	}
-
-	height := uint64(1)
-	if from > 0 {
-		height = from
 	}
 
 	var (
@@ -109,7 +100,7 @@ func (f fetcher) FetchBlocks(ctx context.Context, from uint64, handleFunc func(b
 			}
 
 			b = nil
-			height++
+			height = b.Height + 1
 		}
 	}
 }
@@ -120,47 +111,66 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
-	var block *tt.Block
 	if height == 0 {
-		res, err := f.c.GetLatestBlock(ctx, &tmservice.GetLatestBlockRequest{})
+		res, err := f.tmc.GetLatestBlock(ctx, &tmservice.GetLatestBlockRequest{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get latest block: %w", err)
 		}
-		block = res.Block
-	} else {
-		res, err := f.c.GetBlockByHeight(ctx, &tmservice.GetBlockByHeightRequest{Height: int64(height)})
-		if err != nil {
-			if err, ok := status.FromError(err); ok {
-				if strings.Contains(err.Message(), "requested block height is bigger then the chain length") {
-					return nil, ErrTooHighBlockRequested
-				}
+		height = uint64(res.SdkBlock.Header.Height)
+	}
+
+	blockResp, err := f.tmc.GetBlockByHeight(ctx, &tmservice.GetBlockByHeightRequest{Height: int64(height)})
+	if err != nil {
+		if err, ok := status.FromError(err); ok {
+			if strings.Contains(err.Message(), "requested block height is bigger then the chain length") {
+				return nil, ErrTooHighBlockRequested
 			}
-			return nil, fmt.Errorf("failed to get block: %w", err)
 		}
-		block = res.Block
+		return nil, fmt.Errorf("failed to get block: %w", err)
 	}
 
-	txs := make([]sdk.Tx, len(block.Data.Txs))
-	for i, v := range block.Data.Txs {
-		tx, err := f.d(v)
+	block := Block{
+		Height: uint64(blockResp.SdkBlock.Header.Height),
+		Time:   blockResp.SdkBlock.Header.Time,
+		Txs:    []Tx{},
+	}
+
+	if len(blockResp.SdkBlock.Data.Txs) > 0 {
+		txResp, err := f.txc.GetTxsEvent(context.Background(), &tx.GetTxsEventRequest{
+			Events:  []string{fmt.Sprintf("tx.height=%d", height)},
+			OrderBy: 0,
+			Page:    0,
+			Limit:   uint64(len(blockResp.SdkBlock.Data.Txs)),
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode tx: %w", err)
+			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
-		txs[i] = tx
+
+		for _, v := range txResp.TxResponses {
+			if v.Code != 0 {
+				continue
+			}
+
+			stdTx, err := f.d(v.Tx.Value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode tx: %w", err)
+			}
+
+			block.Txs = append(block.Txs, Tx{
+				Messages: stdTx.GetMsgs(),
+				Hash:     v.TxHash,
+			})
+		}
 	}
 
-	return &Block{
-		Height: uint64(block.Header.Height),
-		Time:   block.Header.Time,
-		Txs:    txs,
-	}, nil
+	return &block, nil
 }
 
 // Messages returns all messages in all transactions.
 func (b Block) Messages() []sdk.Msg {
 	msgs := make([]sdk.Msg, 0, len(b.Txs))
 	for _, tx := range b.Txs {
-		msgs = append(msgs, tx.GetMsgs()...)
+		msgs = append(msgs, tx.Messages...)
 	}
 
 	return msgs
