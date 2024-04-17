@@ -31,6 +31,7 @@ type Block struct {
 type Tx struct {
 	Messages []sdk.Msg
 	Hash     string
+	Memo     string
 }
 
 // Fetcher interface for fetching.
@@ -146,7 +147,7 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
 		}
 
-		for _, v := range txResp.TxResponses {
+		for i, v := range txResp.TxResponses {
 			if v.Code != 0 {
 				continue
 			}
@@ -159,6 +160,7 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 			block.Txs = append(block.Txs, Tx{
 				Messages: stdTx.GetMsgs(),
 				Hash:     v.TxHash,
+				Memo:     txResp.Txs[i].Body.Memo,
 			})
 		}
 	}
