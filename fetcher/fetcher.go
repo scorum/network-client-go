@@ -41,6 +41,8 @@ type Fetcher interface {
 	// FetchBlock fetches block from blockchain.
 	// If height is zero then the highest block will be requested.
 	FetchBlock(ctx context.Context, height uint64) (*Block, error)
+	// PingContext checks if possible to get latest block.
+	PingContext(ctx context.Context) error
 }
 
 type fetcher struct {
@@ -60,6 +62,15 @@ func New(conn *grpc.ClientConn, timeout time.Duration) Fetcher {
 		d:       app.MakeEncodingConfig().TxConfig.TxDecoder(),
 		timeout: timeout,
 	}
+}
+
+// PingContext checks if possible to get latest block.
+func (f fetcher) PingContext(ctx context.Context) error {
+	if _, err := f.tmc.GetLatestBlock(ctx, &tmservice.GetLatestBlockRequest{}); err != nil {
+		return fmt.Errorf("failed to get blockchain latest block")
+	}
+
+	return nil
 }
 
 // FetchBlocks starts fetching routine and runs handleFunc for every block.
