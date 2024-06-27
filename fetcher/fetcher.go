@@ -111,8 +111,8 @@ func (f fetcher) FetchBlocks(ctx context.Context, height uint64, handleFunc func
 				}
 			}
 
-			b = nil
 			height = b.Height + 1
+			b = nil
 		}
 	}
 }
