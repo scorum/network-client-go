@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -131,7 +132,7 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 		height = uint64(res.SdkBlock.Header.Height)
 	}
 
-	blockResp, err := f.tmc.GetBlockByHeight(ctx, &tmservice.GetBlockByHeightRequest{Height: int64(height)})
+	blockResp, err := f.txc.GetBlockWithTxs(ctx, &tx.GetBlockWithTxsRequest{Height: int64(height)})
 	if err != nil {
 		if err, ok := status.FromError(err); ok {
 			if strings.Contains(err.Message(), "requested block height is bigger then the chain length") {
@@ -142,17 +143,17 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 	}
 
 	block := Block{
-		Height: uint64(blockResp.SdkBlock.Header.Height),
-		Time:   blockResp.SdkBlock.Header.Time,
+		Height: uint64(blockResp.Block.Header.Height),
+		Time:   blockResp.Block.Header.Time,
 		Txs:    []Tx{},
 	}
 
-	if len(blockResp.SdkBlock.Data.Txs) > 0 {
+	if len(blockResp.Txs) > 0 {
 		txResp, err := f.txc.GetTxsEvent(context.Background(), &tx.GetTxsEventRequest{
 			Events:  []string{fmt.Sprintf("tx.height=%d", height)},
 			OrderBy: 0,
 			Page:    0,
-			Limit:   uint64(len(blockResp.SdkBlock.Data.Txs)),
+			Limit:   math.MaxUint16,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get transactions: %w", err)
