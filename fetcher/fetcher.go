@@ -6,14 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
 
 	"github.com/scorum/cosmos-network/app"
 )
@@ -124,56 +122,56 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
+	latestBlockResponse, err := f.tmc.GetLatestBlock(ctx, &tmservice.GetLatestBlockRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest block: %w", err)
+	}
 	if height == 0 {
-		res, err := f.tmc.GetLatestBlock(ctx, &tmservice.GetLatestBlockRequest{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get latest block: %w", err)
-		}
-		height = uint64(res.SdkBlock.Header.Height)
+		height = uint64(latestBlockResponse.SdkBlock.Header.Height) - 1
 	}
 
-	blockResp, err := f.txc.GetBlockWithTxs(ctx, &tx.GetBlockWithTxsRequest{Height: int64(height)})
+	if uint64(latestBlockResponse.SdkBlock.Header.Height) <= height {
+		return nil, ErrTooHighBlockRequested
+	}
+
+	blockResp, err := f.tmc.GetBlockByHeight(ctx, &tmservice.GetBlockByHeightRequest{Height: int64(height)})
 	if err != nil {
-		if err, ok := status.FromError(err); ok {
-			if strings.Contains(err.Message(), "requested block height is bigger then the chain length") {
-				return nil, ErrTooHighBlockRequested
-			}
-		}
 		return nil, fmt.Errorf("failed to get block: %w", err)
 	}
 
 	block := Block{
-		Height: uint64(blockResp.Block.Header.Height),
-		Time:   blockResp.Block.Header.Time,
+		Height: uint64(blockResp.SdkBlock.Header.Height),
+		Time:   blockResp.SdkBlock.Header.Time,
 		Txs:    []Tx{},
 	}
 
-	// always request transactions even if block doesn't have any.
-	txResp, err := f.txc.GetTxsEvent(context.Background(), &tx.GetTxsEventRequest{
-		Events:  []string{fmt.Sprintf("tx.height=%d", height)},
-		OrderBy: 0,
-		Page:    0,
-		Limit:   math.MaxUint16,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get transactions: %w", err)
-	}
-
-	for i, v := range txResp.TxResponses {
-		if v.Code != 0 {
-			continue
-		}
-
-		stdTx, err := f.d(v.Tx.Value)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode tx: %w", err)
-		}
-
-		block.Txs = append(block.Txs, Tx{
-			Messages: stdTx.GetMsgs(),
-			Hash:     v.TxHash,
-			Memo:     txResp.Txs[i].Body.Memo,
+	if len(blockResp.SdkBlock.Data.Txs) > 0 {
+		txResp, err := f.txc.GetTxsEvent(context.Background(), &tx.GetTxsEventRequest{
+			Events:  []string{fmt.Sprintf("tx.height=%d", height)},
+			OrderBy: 0,
+			Page:    0,
+			Limit:   math.MaxUint16,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get transactions: %w", err)
+		}
+
+		for i, v := range txResp.TxResponses {
+			if v.Code != 0 {
+				continue
+			}
+
+			stdTx, err := f.d(v.Tx.Value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode tx: %w", err)
+			}
+
+			block.Txs = append(block.Txs, Tx{
+				Messages: stdTx.GetMsgs(),
+				Hash:     v.TxHash,
+				Memo:     txResp.Txs[i].Body.Memo,
+			})
+		}
 	}
 
 	return &block, nil
