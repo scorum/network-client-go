@@ -148,33 +148,32 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 		Txs:    []Tx{},
 	}
 
-	if len(blockResp.Txs) > 0 {
-		txResp, err := f.txc.GetTxsEvent(context.Background(), &tx.GetTxsEventRequest{
-			Events:  []string{fmt.Sprintf("tx.height=%d", height)},
-			OrderBy: 0,
-			Page:    0,
-			Limit:   math.MaxUint16,
-		})
+	// always request transactions even if block doesn't have any.
+	txResp, err := f.txc.GetTxsEvent(context.Background(), &tx.GetTxsEventRequest{
+		Events:  []string{fmt.Sprintf("tx.height=%d", height)},
+		OrderBy: 0,
+		Page:    0,
+		Limit:   math.MaxUint16,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transactions: %w", err)
+	}
+
+	for i, v := range txResp.TxResponses {
+		if v.Code != 0 {
+			continue
+		}
+
+		stdTx, err := f.d(v.Tx.Value)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get transactions: %w", err)
+			return nil, fmt.Errorf("failed to decode tx: %w", err)
 		}
 
-		for i, v := range txResp.TxResponses {
-			if v.Code != 0 {
-				continue
-			}
-
-			stdTx, err := f.d(v.Tx.Value)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode tx: %w", err)
-			}
-
-			block.Txs = append(block.Txs, Tx{
-				Messages: stdTx.GetMsgs(),
-				Hash:     v.TxHash,
-				Memo:     txResp.Txs[i].Body.Memo,
-			})
-		}
+		block.Txs = append(block.Txs, Tx{
+			Messages: stdTx.GetMsgs(),
+			Hash:     v.TxHash,
+			Memo:     txResp.Txs[i].Body.Memo,
+		})
 	}
 
 	return &block, nil
