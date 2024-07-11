@@ -504,8 +504,8 @@ github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sasha-s/go-deadlock v0.3.1 h1:sqv7fDNShgjcaxkO0JNcOAlr8B9+cV5Ey/OB71efZx0=
 github.com/sasha-s/go-deadlock v0.3.1/go.mod h1:F73l+cr82YSh10GxyRI6qZiCgK64VaZjwesgfQ1/iLM=
-github.com/scorum/cosmos-network v0.0.5-0.20231123085856-3cc8cf588910 h1:kEdMRzgklOb/bV9X5HzfVEkXEwdJI366XhRU3jV0ACU=
-github.com/scorum/cosmos-network v0.0.5-0.20231123085856-3cc8cf588910/go.mod h1:y3NXZP1J/NfvuTbK/0jMWoKMQ45XX4rvrGi3KUhd3EI=
+github.com/scorum/cosmos-network v1.0.3 h1:En3OUakhR+KB2DG3zbFL84hbzBHNUko6TshUgtJXzgo=
+github.com/scorum/cosmos-network v1.0.3/go.mod h1:5ftL4talUOcgPxIcx1bagNtSrlNmldH6kbow/td/X6A=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=

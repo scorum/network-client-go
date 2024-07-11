@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/cosmos/cosmos-sdk v0.46.11
-	github.com/scorum/cosmos-network v0.0.5-0.20231123085856-3cc8cf588910
+	github.com/scorum/cosmos-network v1.0.3
 	github.com/spf13/pflag v1.0.5
 	github.com/tendermint/tendermint v0.34.27
 	google.golang.org/grpc v1.55.0
