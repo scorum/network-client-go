@@ -3,6 +3,7 @@ package broadcaster
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/pflag"
 
@@ -23,6 +25,9 @@ import (
 
 	"github.com/scorum/cosmos-network/app"
 )
+
+const defaultWaitRetries = 5
+const defaultWaitRetryInterval = 2 * time.Second
 
 func init() {
 	app.InitSDKConfig()
@@ -54,6 +59,10 @@ type broadcaster struct {
 	ctx client.Context
 	txf tx.Factory
 
+	waitBlock         bool
+	waitRetries       int
+	waitRetryInterval time.Duration
+
 	mu sync.Mutex
 }
 
@@ -67,6 +76,10 @@ type Config struct {
 
 	NodeURI       string
 	BroadcastMode string
+
+	WaitBlock              bool
+	WaitBlockRetriesCount  int
+	WaitBlockRetryInterval time.Duration
 
 	From    string
 	ChainID string
@@ -125,6 +138,10 @@ func New(cfg Config) (*broadcaster, error) {
 		WithNodeURI(cfg.NodeURI).
 		WithClient(c)
 
+	if strings.EqualFold(cfg.BroadcastMode, "async") {
+		ctx = ctx.WithBroadcastMode("async")
+	}
+
 	factory := tx.NewFactoryCLI(ctx, &pflag.FlagSet{}).
 		WithFees(cfg.Fees.String()).
 		WithGas(cfg.Gas).
@@ -134,7 +151,19 @@ func New(cfg Config) (*broadcaster, error) {
 		ctx: ctx,
 		txf: factory,
 
+		waitBlock:         cfg.WaitBlock,
+		waitRetries:       cfg.WaitBlockRetriesCount,
+		waitRetryInterval: cfg.WaitBlockRetryInterval,
+
 		mu: sync.Mutex{},
+	}
+
+	if b.waitRetries == 0 {
+		b.waitRetries = defaultWaitRetries
+	}
+
+	if b.waitRetryInterval == 0 {
+		b.waitRetryInterval = defaultWaitRetryInterval
 	}
 
 	if err := b.refreshSequence(); err != nil {
@@ -257,6 +286,54 @@ func (b *broadcaster) broadcast(msgs []sdk.Msg, memo string, isRetry bool) (*sdk
 		}
 
 		return nil, fmt.Errorf("failed to broadcast tx: %s", resp.String())
+	}
+
+	if b.waitBlock {
+		node, err := b.ctx.GetNode()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get node: %w", err)
+		}
+
+		hash, err := hex.DecodeString(resp.TxHash)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode txHash: %w", err)
+		}
+
+		var confirmErr error
+		for i := 0; i < b.waitRetries; i++ {
+			if confirmErr != nil {
+				time.Sleep(b.waitRetryInterval)
+			}
+
+			txResp, err := node.Tx(context.Background(), hash, true)
+			if err != nil {
+				confirmErr = err
+				continue
+			}
+
+			if !txResp.TxResult.IsOK() {
+				return nil, fmt.Errorf("failed to broadcast tx: %s", resp.String())
+			}
+
+			parsedLogs, _ := sdk.ParseABCILogs(txResp.TxResult.Log)
+
+			resp.Height = txResp.Height
+			resp.Codespace = txResp.TxResult.Codespace
+			resp.Info = txResp.TxResult.Info
+			resp.Data = strings.ToUpper(hex.EncodeToString(txResp.TxResult.Data))
+			resp.Logs = parsedLogs
+			resp.RawLog = txResp.TxResult.Log
+			resp.Events = txResp.TxResult.Events
+			resp.Code = txResp.TxResult.Code
+			resp.GasUsed = txResp.TxResult.GasUsed
+			resp.GasWanted = txResp.TxResult.GasWanted
+
+			return resp, nil
+		}
+
+		if confirmErr != nil {
+			return nil, fmt.Errorf("failed to check tx: %w", err)
+		}
 	}
 
 	return resp, nil
