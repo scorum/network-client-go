@@ -11,9 +11,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
-	"google.golang.org/grpc"
-
 	"github.com/scorum/cosmos-network/app"
+	"google.golang.org/grpc"
 )
 
 // ErrTooHighBlockRequested returned when blockchain's height is less than requested.

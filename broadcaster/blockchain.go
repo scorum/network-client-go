@@ -13,17 +13,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spf13/pflag"
-
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/cosmos/cosmos-sdk/x/auth/types"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-
 	"github.com/scorum/cosmos-network/app"
+	"github.com/spf13/pflag"
 )
 
 const defaultWaitRetries = 5
@@ -142,7 +140,12 @@ func New(cfg Config) (*broadcaster, error) {
 		ctx = ctx.WithBroadcastMode("async")
 	}
 
-	factory := tx.NewFactoryCLI(ctx, &pflag.FlagSet{}).
+	factory, err := tx.NewFactoryCLI(ctx, &pflag.FlagSet{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create factory: %w", err)
+	}
+
+	factory = factory.
 		WithFees(cfg.Fees.String()).
 		WithGas(cfg.Gas).
 		WithGasAdjustment(cfg.GasAdjust)
@@ -264,7 +267,7 @@ func (b *broadcaster) broadcast(msgs []sdk.Msg, memo string, isRetry bool) (*sdk
 		return nil, fmt.Errorf("failed to encode tx: %w", err)
 	}
 
-	// broadcast to a Tendermint node
+	// broadcast to node
 	resp, err := b.ctx.BroadcastTx(txBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to broadcast tx: %w", err)
