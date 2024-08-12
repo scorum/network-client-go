@@ -43,13 +43,15 @@ type Broadcaster interface {
 	// GetHeight returns current height.
 	GetHeight(ctx context.Context) (uint64, error)
 	// BroadcastMsg broadcasts alone message.
-	BroadcastMsg(msg sdk.Msg, memo string) (*sdk.TxResponse, error)
+	BroadcastMsg(ctx context.Context, msg sdk.Msg, memo string) (*sdk.TxResponse, error)
 	// Broadcast broadcasts messages.
-	Broadcast(msgs []sdk.Msg, memo string) (*sdk.TxResponse, error)
+	Broadcast(ctx context.Context, msgs []sdk.Msg, memo string) (*sdk.TxResponse, error)
 
 	// PingContext pings node.
 	PingContext(ctx context.Context) error
 }
+
+var _ Broadcaster = &broadcaster{}
 
 var accountSequenceMismatchErrorRegExp = regexp.MustCompile(`.+account sequence mismatch, expected (\d+), got \d+:.+`)
 
@@ -197,13 +199,13 @@ func (b *broadcaster) GetHeight(ctx context.Context) (uint64, error) {
 }
 
 // BroadcastMsg broadcasts alone message.
-func (b *broadcaster) BroadcastMsg(msg sdk.Msg, memo string) (*sdk.TxResponse, error) {
-	return b.Broadcast([]sdk.Msg{msg}, memo)
+func (b *broadcaster) BroadcastMsg(ctx context.Context, msg sdk.Msg, memo string) (*sdk.TxResponse, error) {
+	return b.Broadcast(ctx, []sdk.Msg{msg}, memo)
 }
 
 // Broadcast broadcasts messages.
-func (b *broadcaster) Broadcast(msgs []sdk.Msg, memo string) (*sdk.TxResponse, error) {
-	out, err := b.broadcast(msgs, memo, false)
+func (b *broadcaster) Broadcast(ctx context.Context, msgs []sdk.Msg, memo string) (*sdk.TxResponse, error) {
+	out, err := b.broadcast(ctx, msgs, memo, false)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to broadcast: %w", err)
@@ -225,7 +227,7 @@ func (b *broadcaster) PingContext(ctx context.Context) error {
 	return nil
 }
 
-func (b *broadcaster) broadcast(msgs []sdk.Msg, memo string, isRetry bool) (*sdk.TxResponse, error) {
+func (b *broadcaster) broadcast(ctx context.Context, msgs []sdk.Msg, memo string, isRetry bool) (*sdk.TxResponse, error) {
 	if !isRetry {
 		b.mu.Lock()
 		defer b.mu.Unlock()
@@ -245,7 +247,7 @@ func (b *broadcaster) broadcast(msgs []sdk.Msg, memo string, isRetry bool) (*sdk
 					b.txf = b.txf.WithSequence(seq)
 				}
 
-				return b.broadcast(msgs, memo, true)
+				return b.broadcast(ctx, msgs, memo, true)
 			}
 
 			return nil, fmt.Errorf("failed to calculate gas: %w", err)
@@ -258,7 +260,7 @@ func (b *broadcaster) broadcast(msgs []sdk.Msg, memo string, isRetry bool) (*sdk
 		return nil, fmt.Errorf("failed to build tx: %w", err)
 	}
 
-	if err := tx.Sign(txf, b.ctx.GetFromName(), unsignedTx, true); err != nil {
+	if err := tx.Sign(ctx, txf, b.ctx.GetFromName(), unsignedTx, true); err != nil {
 		return nil, fmt.Errorf("failed to sign tx: %w", err)
 	}
 
@@ -284,7 +286,7 @@ func (b *broadcaster) broadcast(msgs []sdk.Msg, memo string, isRetry bool) (*sdk
 			if seq := getNextSequence(resp.RawLog); seq != 0 {
 				b.txf = b.txf.WithSequence(seq)
 
-				return b.broadcast(msgs, memo, true)
+				return b.broadcast(ctx, msgs, memo, true)
 			}
 		}
 

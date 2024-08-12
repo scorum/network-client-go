@@ -8,7 +8,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
+	"github.com/cosmos/cosmos-sdk/client/grpc/cmtservice"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/scorum/cosmos-network/app"
@@ -45,7 +45,7 @@ type Fetcher interface {
 
 type fetcher struct {
 	txc tx.ServiceClient
-	tmc tmservice.ServiceClient
+	tmc cmtservice.ServiceClient
 
 	d       sdk.TxDecoder
 	timeout time.Duration
@@ -55,7 +55,7 @@ type fetcher struct {
 func New(conn *grpc.ClientConn, timeout time.Duration) Fetcher {
 	return fetcher{
 		txc: tx.NewServiceClient(conn),
-		tmc: tmservice.NewServiceClient(conn),
+		tmc: cmtservice.NewServiceClient(conn),
 
 		d:       app.MakeEncodingConfig().TxConfig.TxDecoder(),
 		timeout: timeout,
@@ -64,7 +64,7 @@ func New(conn *grpc.ClientConn, timeout time.Duration) Fetcher {
 
 // PingContext checks if possible to get latest block.
 func (f fetcher) PingContext(ctx context.Context) error {
-	if _, err := f.tmc.GetLatestBlock(ctx, &tmservice.GetLatestBlockRequest{}); err != nil {
+	if _, err := f.tmc.GetLatestBlock(ctx, &cmtservice.GetLatestBlockRequest{}); err != nil {
 		return fmt.Errorf("failed to get blockchain latest block")
 	}
 
@@ -121,7 +121,7 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
-	latestBlockResponse, err := f.tmc.GetLatestBlock(ctx, &tmservice.GetLatestBlockRequest{})
+	latestBlockResponse, err := f.tmc.GetLatestBlock(ctx, &cmtservice.GetLatestBlockRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest block: %w", err)
 	}
@@ -133,7 +133,7 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 		return nil, ErrTooHighBlockRequested
 	}
 
-	blockResp, err := f.tmc.GetBlockByHeight(ctx, &tmservice.GetBlockByHeightRequest{Height: int64(height)})
+	blockResp, err := f.tmc.GetBlockByHeight(ctx, &cmtservice.GetBlockByHeightRequest{Height: int64(height)})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block: %w", err)
 	}
