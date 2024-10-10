@@ -146,7 +146,7 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 
 	if len(blockResp.SdkBlock.Data.Txs) > 0 {
 		txResp, err := f.txc.GetTxsEvent(context.Background(), &tx.GetTxsEventRequest{
-			Events:  []string{fmt.Sprintf("tx.height=%d", height)},
+			Query:   fmt.Sprintf("tx.height=%d", height),
 			OrderBy: 0,
 			Page:    0,
 			Limit:   math.MaxUint16,
