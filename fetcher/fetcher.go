@@ -52,14 +52,20 @@ type fetcher struct {
 }
 
 // New returns new instance of fetcher.
-func New(conn *grpc.ClientConn, timeout time.Duration) Fetcher {
-	return fetcher{
+func New(conn *grpc.ClientConn, timeout time.Duration, options ...Option) Fetcher {
+	f := &fetcher{
 		txc: tx.NewServiceClient(conn),
 		tmc: cmtservice.NewServiceClient(conn),
 
 		d:       app.MakeEncodingConfig().TxConfig.TxDecoder(),
 		timeout: timeout,
 	}
+
+	for _, v := range options {
+		v(f)
+	}
+
+	return f
 }
 
 // PingContext checks if possible to get latest block.

@@ -2,7 +2,19 @@ package fetcher
 
 import (
 	"time"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
+
+// Option is used to change fetcher initialization.
+type Option func(f *fetcher)
+
+// WithTxDecoder sets decoder to use instead of Scorum decoder.
+func WithTxDecoder(d sdk.TxDecoder) Option {
+	return func(f *fetcher) {
+		f.d = d
+	}
+}
 
 // FetchBlocksOption is used to tune FetchBlocks method.
 type FetchBlocksOption func(f *FetchBlocksOptions)
