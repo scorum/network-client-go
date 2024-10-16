@@ -29,6 +29,8 @@ type FetchBlocksOptions struct {
 	errHandler func(height uint64, err error)
 	// skipError disable retries of block handling with handleFunc.
 	skipError bool
+	// skipUnknownTransactions used to set skipping transactions fetcher failed to decode.
+	skipUnknownTransactions bool
 }
 
 var defaultFetchBlockOptions = FetchBlocksOptions{
@@ -63,5 +65,12 @@ func WithErrHandler(f func(height uint64, err error)) FetchBlocksOption {
 func WithSkipError(b bool) FetchBlocksOption {
 	return func(f *FetchBlocksOptions) {
 		f.skipError = b
+	}
+}
+
+// WithSkipUnknownTransactions used to set skipping transactions fetcher failed to decode.
+func WithSkipUnknownTransactions(b bool) FetchBlocksOption {
+	return func(f *FetchBlocksOptions) {
+		f.skipUnknownTransactions = b
 	}
 }

@@ -38,7 +38,7 @@ type Fetcher interface {
 	FetchBlocks(ctx context.Context, from uint64, handleFunc func(b Block) error, opts ...FetchBlocksOption) error
 	// FetchBlock fetches block from blockchain.
 	// If height is zero then the highest block will be requested.
-	FetchBlock(ctx context.Context, height uint64) (*Block, error)
+	FetchBlock(ctx context.Context, height uint64, skipUnknownTransactions bool) (*Block, error)
 	// PingContext checks if possible to get latest block.
 	PingContext(ctx context.Context) error
 }
@@ -95,7 +95,7 @@ func (f fetcher) FetchBlocks(ctx context.Context, height uint64, handleFunc func
 			return ctx.Err()
 		default:
 			if b == nil {
-				if b, err = f.FetchBlock(ctx, height); err != nil {
+				if b, err = f.FetchBlock(ctx, height, cfg.skipUnknownTransactions); err != nil {
 					if errors.Is(err, ErrTooHighBlockRequested) {
 						time.Sleep(cfg.retryLastBlockInterval)
 						continue
@@ -123,7 +123,11 @@ func (f fetcher) FetchBlocks(ctx context.Context, height uint64, handleFunc func
 
 // FetchBlock fetches block from blockchain.
 // If height is zero then the highest block will be requested.
-func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) {
+func (f fetcher) FetchBlock(
+	ctx context.Context,
+	height uint64,
+	skipUnknownTransactions bool,
+) (*Block, error) {
 	ctx, cancel := context.WithTimeout(ctx, f.timeout)
 	defer cancel()
 
@@ -168,6 +172,9 @@ func (f fetcher) FetchBlock(ctx context.Context, height uint64) (*Block, error) 
 
 			stdTx, err := f.d(v.Tx.Value)
 			if err != nil {
+				if skipUnknownTransactions {
+					continue
+				}
 				return nil, fmt.Errorf("failed to decode tx: %w", err)
 			}
 
