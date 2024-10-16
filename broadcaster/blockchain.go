@@ -24,13 +24,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const defaultWaitRetries = 5
-const defaultWaitRetryInterval = 2 * time.Second
-
-func init() {
-	app.InitSDKConfig()
-}
-
 // ErrTxInMempoolCache is returned when tx is already broadcast and exists in mempool cache.
 var ErrTxInMempoolCache = errors.New("tx is already in mempool cache")
 
@@ -77,10 +70,6 @@ type Config struct {
 	NodeURI       string
 	BroadcastMode string
 
-	WaitBlock              bool
-	WaitBlockRetriesCount  int
-	WaitBlockRetryInterval time.Duration
-
 	From    string
 	ChainID string
 
@@ -90,8 +79,19 @@ type Config struct {
 }
 
 // New returns new instance of broadcaster
-func New(cfg Config) (*broadcaster, error) {
-	encodingConfig := app.MakeEncodingConfig()
+func New(cfg Config, options ...Option) (*broadcaster, error) {
+	opts := defaultOpts
+	for _, v := range options {
+		v(&opts)
+	}
+
+	encodingConfig := opts.encodingConfig
+	config := sdk.GetConfig()
+	config.SetBech32PrefixForAccount(opts.sdkConfig.AccountAddressPrefix, opts.sdkConfig.AccountPubKeyPrefix)
+	config.SetBech32PrefixForValidator(opts.sdkConfig.ValidatorAddressPrefix, opts.sdkConfig.ValidatorPubKeyPrefix)
+	config.SetBech32PrefixForConsensusNode(opts.sdkConfig.ConsNodeAddressPrefix, opts.sdkConfig.ConsNodePubKeyPrefix)
+	config.Seal()
+
 	kr, err := keyring.New(
 		app.Name,
 		cfg.KeyringBackend,
@@ -156,19 +156,11 @@ func New(cfg Config) (*broadcaster, error) {
 		ctx: ctx,
 		txf: factory,
 
-		waitBlock:         cfg.WaitBlock,
-		waitRetries:       cfg.WaitBlockRetriesCount,
-		waitRetryInterval: cfg.WaitBlockRetryInterval,
+		waitBlock:         opts.waitBlock,
+		waitRetries:       opts.waitRetries,
+		waitRetryInterval: opts.waitRetryInterval,
 
 		mu: sync.Mutex{},
-	}
-
-	if b.waitRetries == 0 {
-		b.waitRetries = defaultWaitRetries
-	}
-
-	if b.waitRetryInterval == 0 {
-		b.waitRetryInterval = defaultWaitRetryInterval
 	}
 
 	if err := b.refreshSequence(); err != nil {
