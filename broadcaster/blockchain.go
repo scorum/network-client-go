@@ -76,6 +76,7 @@ type Config struct {
 	Fees      sdk.Coins
 	Gas       uint64
 	GasAdjust float64
+	GasPrices sdk.DecCoins
 }
 
 // New returns new instance of broadcaster
@@ -147,10 +148,14 @@ func New(cfg Config, options ...Option) (*broadcaster, error) {
 		return nil, fmt.Errorf("failed to create factory: %w", err)
 	}
 
-	factory = factory.
-		WithFees(cfg.Fees.String()).
-		WithGas(cfg.Gas).
-		WithGasAdjustment(cfg.GasAdjust)
+	if cfg.Fees.Len() > 0 {
+		factory = factory.WithFees(cfg.Fees.String())
+	} else {
+		factory = factory.
+			WithGas(cfg.Gas).
+			WithGasAdjustment(cfg.GasAdjust).
+			WithGasPrices(cfg.GasPrices.String())
+	}
 
 	b := &broadcaster{
 		ctx: ctx,
